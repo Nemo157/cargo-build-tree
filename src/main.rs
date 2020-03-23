@@ -26,7 +26,12 @@ fn main() -> anyhow::Result<()> {
 
     let mut builder = escargot::CargoBuild::new();
 
-    for arg in std::env::args().skip(1) {
+    let mut args = std::env::args().skip(1).peekable();
+    if args.peek().map(|s| &**s) == Some("build-tree") {
+        let _ = args.next();
+    }
+
+    for arg in args {
         builder = builder.arg(arg);
     }
 
