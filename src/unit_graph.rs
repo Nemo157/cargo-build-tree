@@ -32,7 +32,7 @@ pub struct Profile {
     pub opt_level: String,
     pub lto: String,
     pub codegen_units: Option<u32>,
-    pub debuginfo: u32,
+    pub debuginfo: Option<u32>,
     pub debug_assertions: bool,
     pub overflow_checks: bool,
     pub rpath: bool,
