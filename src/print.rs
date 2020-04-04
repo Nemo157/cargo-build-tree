@@ -72,13 +72,14 @@ impl<'a> Formatter<'a> {
             let mut boring_seen = seen.clone();
             if let Some(count) = self.boring(index, unit, status, &mut boring_seen) {
                 if count == 0 {
-                    writeln!(self.buffer,).unwrap();
+                    writeln!(self.buffer).unwrap();
                 } else {
                     writeln!(self.buffer, " (+ {} other {})", count, &status[index]).unwrap();
                 }
             } else {
                 writeln!(self.buffer).unwrap();
-                for dependency in &unit.dependencies {
+                let (done, others) = unit.dependencies.iter().partition::<Vec<_>, _>(|dep| status[dep.index] == Status::Done);
+                for dependency in others {
                     total += self.println(
                         dependency.index,
                         &self.graph.units[dependency.index],
@@ -86,6 +87,19 @@ impl<'a> Formatter<'a> {
                         seen,
                         indent + 2,
                     );
+                }
+                if !done.is_empty() {
+                    write!(
+                        self.buffer,
+                        "{:1$} {2} ({3}",
+                        "", indent + 2, &Status::Done, &self.graph.units[done[0].index].pkg_id
+                    )
+                    .unwrap();
+                    for dep in done.iter().skip(1) {
+                        write!(self.buffer, ", {}", &self.graph.units[dep.index].pkg_id).unwrap();
+                    }
+                    writeln!(self.buffer, ")").unwrap();
+                    total += 1;
                 }
             }
         } else {
@@ -104,7 +118,7 @@ impl<'a> Formatter<'a> {
         if clear {
             write!(self.buffer, "[{}A[J", self.lines).unwrap();
         }
-        let mut total = 1;
+        let mut total = 2;
         let mut seen =
             FxHashSet::with_capacity_and_hasher(self.graph.units.len(), FxBuildHasher::default());
         for &root in &self.graph.roots {
