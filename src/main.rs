@@ -1,6 +1,7 @@
 // use escargot::format::{diagnostic::DiagnosticLevel, Message};
 use cargo_metadata::{Message, diagnostic::DiagnosticLevel};
-use std::{process::{Command, Stdio}, io::{BufRead, BufReader}};
+use tokio::{process::Command, io::{BufReader, AsyncBufReadExt}};
+use std::process::Stdio;
 
 mod diag;
 mod print;
@@ -10,15 +11,14 @@ mod unit_graph;
 use status::Status;
 use unit_graph::{Mode, UnitGraph};
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let output = Command::new("cargo")
         .args(&["build", "--message-format=json", "--unit-graph", "-Zunstable-options"])
-        .output()?;
+        .output()
+        .await?;
 
-    let mut line = String::with_capacity(1024);
-    (&output.stdout[..]).read_line(&mut line)?;
-    let graph: UnitGraph = serde_json::from_str(&line)?;
-    line.clear();
+    let graph: UnitGraph = serde_json::from_slice(&output.stdout)?;
 
     let mut status = vec![Status::Unknown; graph.units.len()];
 
@@ -42,7 +42,8 @@ fn main() -> anyhow::Result<()> {
 
     let mut stdout = BufReader::new(builder.stdout.take().unwrap());
 
-    while stdout.read_line(&mut line)? > 0 {
+    let mut line = String::with_capacity(1024);
+    while stdout.read_line(&mut line).await? > 0 {
         match serde_json::from_str(&line) {
             Ok(Message::BuildScriptExecuted(msg)) => {
                 let index = graph.units.iter().position(|unit| {
