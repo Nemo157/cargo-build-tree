@@ -80,13 +80,13 @@ impl fmt::Display for PackageId {
     }
 }
 
-impl PartialEq<escargot::format::WorkspaceMember<'_>> for PackageId {
-    fn eq(&self, rhs: &escargot::format::WorkspaceMember) -> bool {
+impl PartialEq<cargo_metadata::PackageId> for PackageId {
+    fn eq(&self, rhs: &cargo_metadata::PackageId) -> bool {
         serde_json::to_string(self).unwrap() == serde_json::to_string(rhs).unwrap()
     }
 }
 
-impl PartialEq<PackageId> for escargot::format::WorkspaceMember<'_> {
+impl PartialEq<PackageId> for cargo_metadata::PackageId {
     fn eq(&self, rhs: &PackageId) -> bool {
         serde_json::to_string(self).unwrap() == serde_json::to_string(rhs).unwrap()
     }

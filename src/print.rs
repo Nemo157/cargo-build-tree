@@ -109,14 +109,14 @@ impl<'a> Formatter<'a> {
     }
 
     pub fn clear(&mut self) {
-        print!("[{}A[J", self.lines);
+        print!("[{}F[J", self.lines - 1);
         self.lines = 0;
     }
 
     pub fn print(&mut self, status: &[Status], clear: bool) {
         self.buffer.clear();
         if clear {
-            write!(self.buffer, "[{}A[J", self.lines).unwrap();
+            write!(self.buffer, "[{}F[J", self.lines - 1).unwrap();
         }
         let mut total = 2;
         let mut seen =

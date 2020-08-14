@@ -7,11 +7,11 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-escargot = "0.5.0"
-anyhow = "1.0.27"
-serde = "1.0.105"
-fxhash = "0.2.1"
-serde_json = "1.0.48"
-codemap-diagnostic = "0.1.1"
-annotate-snippets.version = "0.6.1"
 annotate-snippets.features = ["ansi_term"]
+annotate-snippets.version = "0.6.1"
+anyhow = "1.0.27"
+cargo_metadata = "0.11.1"
+codemap-diagnostic = "0.1.1"
+fxhash = "0.2.1"
+serde = "1.0.105"
+serde_json = "1.0.48"

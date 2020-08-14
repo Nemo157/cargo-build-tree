@@ -3,7 +3,7 @@ use annotate_snippets::{
     formatter::DisplayListFormatter,
     snippet::{Annotation, AnnotationType, Snippet, SourceAnnotation},
 };
-use escargot::format::diagnostic::{Diagnostic, DiagnosticLevel};
+use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 
 fn level_to_type(level: DiagnosticLevel) -> AnnotationType {
     match level {
@@ -19,8 +19,8 @@ fn level_to_type(level: DiagnosticLevel) -> AnnotationType {
 fn diagnostic_to_snippet(diag: Diagnostic) -> Snippet {
     Snippet {
         title: Some(Annotation {
-            label: Some(diag.message.clone().into_owned()),
-            id: diag.code.clone().map(|code| code.code.clone().into_owned()),
+            label: Some(diag.message.clone()),
+            id: diag.code.clone().map(|code| code.code.clone()),
             annotation_type: level_to_type(diag.level),
         }),
         footer: diag
@@ -28,11 +28,11 @@ fn diagnostic_to_snippet(diag: Diagnostic) -> Snippet {
             .iter()
             .filter(|child| child.spans.is_empty())
             .map(|child| Annotation {
-                label: Some(child.message.clone().into_owned()),
+                label: Some(child.message.clone()),
                 id: child
                     .code
                     .clone()
-                    .map(|code| code.code.clone().into_owned()),
+                    .map(|code| code.code.clone()),
                 annotation_type: level_to_type(child.level),
             })
             .collect(),
@@ -42,13 +42,13 @@ fn diagnostic_to_snippet(diag: Diagnostic) -> Snippet {
             .map(|span| annotate_snippets::snippet::Slice {
                 source: span.text.iter().map(|text| &*text.text).collect(),
                 line_start: span.line_start,
-                origin: Some(span.file_name.display().to_string()),
+                origin: Some(span.file_name.to_string()),
                 fold: false,
                 annotations: std::iter::once(SourceAnnotation {
                     label: span
                         .label
                         .as_ref()
-                        .map(|l| l.clone().into_owned())
+                        .map(|l| l.clone())
                         .unwrap_or_else(String::new),
                     annotation_type: level_to_type(diag.level),
                     range: (span.column_start - 1, span.column_end - 1),
@@ -62,7 +62,7 @@ fn diagnostic_to_snippet(diag: Diagnostic) -> Snippet {
                                 .spans
                                 .iter()
                                 .map(|span| SourceAnnotation {
-                                    label: child.message.clone().into_owned(),
+                                    label: child.message.clone(),
                                     annotation_type: level_to_type(child.level),
                                     range: (span.column_start - 1, span.column_end - 1),
                                 })
