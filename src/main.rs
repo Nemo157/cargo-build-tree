@@ -2,6 +2,7 @@
 use cargo_metadata::{Message, diagnostic::DiagnosticLevel};
 use tokio::{process::Command, io::{BufReader, AsyncBufReadExt as _}};
 use std::process::Stdio;
+use futures::stream::StreamExt as _;
 
 mod diag;
 mod print;
@@ -41,63 +42,101 @@ async fn main() -> anyhow::Result<()> {
     let mut builder = builder.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
 
     let stdout = BufReader::new(builder.stdout.take().unwrap());
+    let stderr = BufReader::new(builder.stderr.take().unwrap());
 
-    let mut lines = stdout.lines();
-    while let Some(line) = lines.next_line().await? {
-        match serde_json::from_str(&line) {
-            Ok(Message::BuildScriptExecuted(msg)) => {
-                let index = graph.units.iter().position(|unit| {
-                    unit.mode == Mode::RunCustomBuild && unit.pkg_id == msg.package_id
-                });
-                if let Some(index) = index {
-                    status[index] = Status::Done;
+    enum Item {
+        Stdout(String),
+        Stderr(String),
+        Frame,
+    }
+
+    let mut items = futures::stream::select(futures::stream::select(
+        stdout.lines().map(|l| l.map(Item::Stdout)),
+        stderr.lines().map(|l| l.map(Item::Stderr))),
+        tokio::time::interval(std::time::Duration::from_millis(100)).map(|_| Ok(Item::Frame)));
+
+    while let Some(item) = items.next().await.transpose()? {
+        match item {
+            Item::Stdout(line) => {
+                match serde_json::from_str(&line) {
+                    Ok(Message::BuildScriptExecuted(msg)) => {
+                        let index = graph.units.iter().position(|unit| {
+                            unit.mode == Mode::RunCustomBuild && unit.pkg_id == msg.package_id
+                        });
+                        if let Some(index) = index {
+                            status[index] = Status::Done;
+                        }
+                        tree_formatter.print(&status, true);
+                    }
+                    Ok(Message::CompilerArtifact(msg)) => {
+                        let index = graph.units.iter().position(|unit| {
+                            unit.mode == Mode::Build
+                                && unit.target.kind == msg.target.kind
+                                && unit.pkg_id == msg.package_id
+                        });
+                        if let Some(index) = index {
+                            status[index] = Status::Done;
+                        }
+                        tree_formatter.print(&status, true);
+                    }
+                    Ok(Message::CompilerMessage(msg)) => {
+                        let index = graph.units.iter().position(|unit| {
+                            unit.mode == Mode::Build
+                                && unit.target.kind == msg.target.kind
+                                && unit.pkg_id == msg.package_id
+                        });
+                        if let (Some(index), DiagnosticLevel::Error) = (index, msg.message.level) {
+                            status[index] = Status::Error;
+                        }
+                        tree_formatter.clear();
+                        diag::emit(msg.message);
+                        tree_formatter.print(&status, false);
+                    }
+                    Ok(Message::BuildFinished(_)) => {
+                        break;
+                    }
+                    Ok(Message::TextLine(m)) => {
+                        tree_formatter.clear();
+                        dbg!(m);
+                        println!();
+                        tree_formatter.print(&status, false);
+                    }
+                    Ok(Message::Unknown) => {
+                        tree_formatter.clear();
+                        dbg!(&line);
+                        println!();
+                        tree_formatter.print(&status, false);
+                    }
+                    Err(e) => {
+                        tree_formatter.clear();
+                        dbg!(e);
+                        println!();
+                        tree_formatter.print(&status, false);
+                    }
                 }
+            }
+            Item::Stderr(line) => {
+                let mut fragments = line.trim_start().split(' ');
+                if fragments.next() == Some("Compiling") {
+                    let name = fragments.next().unwrap_or_default();
+                    let mut version = fragments.next().unwrap_or_default();
+                    if version.starts_with('v') {
+                        version = &version[1..];
+                    }
+                    let index = graph.units.iter().position(|unit| {
+                        unit.mode == Mode::Build
+                            && unit.pkg_id.name == name
+                            && unit.pkg_id.version == version
+                    });
+                    if let Some(index) = index {
+                        status[index] = Status::Building;
+                    }
+                    tree_formatter.print(&status, true);
+                }
+            }
+            Item::Frame => {
+                tree_formatter.next_frame();
                 tree_formatter.print(&status, true);
-            }
-            Ok(Message::CompilerArtifact(msg)) => {
-                let index = graph.units.iter().position(|unit| {
-                    unit.mode == Mode::Build
-                        && unit.target.kind == msg.target.kind
-                        && unit.pkg_id == msg.package_id
-                });
-                if let Some(index) = index {
-                    status[index] = Status::Done;
-                }
-                tree_formatter.print(&status, true);
-            }
-            Ok(Message::CompilerMessage(msg)) => {
-                let index = graph.units.iter().position(|unit| {
-                    unit.mode == Mode::Build
-                        && unit.target.kind == msg.target.kind
-                        && unit.pkg_id == msg.package_id
-                });
-                if let (Some(index), DiagnosticLevel::Error) = (index, msg.message.level) {
-                    status[index] = Status::Error;
-                }
-                tree_formatter.clear();
-                diag::emit(msg.message);
-                tree_formatter.print(&status, false);
-            }
-            Ok(Message::BuildFinished(_)) => {
-                break;
-            }
-            Ok(Message::TextLine(m)) => {
-                tree_formatter.clear();
-                dbg!(m);
-                println!();
-                tree_formatter.print(&status, false);
-            }
-            Ok(Message::Unknown) => {
-                tree_formatter.clear();
-                dbg!(&line);
-                println!();
-                tree_formatter.print(&status, false);
-            }
-            Err(e) => {
-                tree_formatter.clear();
-                dbg!(e);
-                println!();
-                tree_formatter.print(&status, false);
             }
         }
     }

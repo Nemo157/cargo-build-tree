@@ -5,6 +5,7 @@ use std::fmt::Write;
 
 pub struct Formatter<'a> {
     graph: &'a UnitGraph,
+    frame: usize,
     lines: usize,
     buffer: String,
 }
@@ -13,6 +14,7 @@ impl<'a> Formatter<'a> {
     pub fn new(graph: &'a UnitGraph) -> Self {
         Self {
             graph,
+            frame: 0,
             lines: 0,
             buffer: String::new(),
         }
@@ -65,7 +67,7 @@ impl<'a> Formatter<'a> {
         write!(
             self.buffer,
             "{:1$} {2} {3}{4}",
-            "", indent, &status[index], unit.pkg_id, extra
+            "", indent, &status[index].display(self.frame), unit.pkg_id, extra
         )
         .unwrap();
         if seen.insert(index) {
@@ -74,7 +76,7 @@ impl<'a> Formatter<'a> {
                 if count == 0 {
                     writeln!(self.buffer).unwrap();
                 } else {
-                    writeln!(self.buffer, " (+ {} other {})", count, &status[index]).unwrap();
+                    writeln!(self.buffer, " (+ {} other {})", count, &status[index].display(self.frame)).unwrap();
                 }
             } else {
                 writeln!(self.buffer).unwrap();
@@ -92,7 +94,7 @@ impl<'a> Formatter<'a> {
                     write!(
                         self.buffer,
                         "{:1$} {2} ({3}",
-                        "", indent + 2, &Status::Done, &self.graph.units[done[0].index].pkg_id
+                        "", indent + 2, Status::Done.display(self.frame), &self.graph.units[done[0].index].pkg_id
                     )
                     .unwrap();
                     for dep in done.iter().skip(1) {
@@ -109,14 +111,14 @@ impl<'a> Formatter<'a> {
     }
 
     pub fn clear(&mut self) {
-        print!("[{}F[J", self.lines);
+        print!("[{}F[J", self.lines + 1);
         self.lines = 0;
     }
 
     pub fn print(&mut self, status: &[Status], clear: bool) {
         self.buffer.clear();
         if clear {
-            write!(self.buffer, "[{}F[J", self.lines).unwrap();
+            write!(self.buffer, "[{}F[J", self.lines + 1).unwrap();
         }
         let mut total = 2;
         let mut seen =
@@ -127,5 +129,9 @@ impl<'a> Formatter<'a> {
         writeln!(self.buffer).unwrap();
         self.lines = total;
         print!("{}", self.buffer);
+    }
+
+    pub fn next_frame(&mut self) {
+        self.frame = self.frame.wrapping_add(1);
     }
 }
