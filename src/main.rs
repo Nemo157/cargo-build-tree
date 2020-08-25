@@ -1,6 +1,6 @@
 // use escargot::format::{diagnostic::DiagnosticLevel, Message};
 use cargo_metadata::{Message, diagnostic::DiagnosticLevel};
-use tokio::{process::Command, io::{BufReader, AsyncBufReadExt}};
+use tokio::{process::Command, io::{BufReader, AsyncBufReadExt as _}};
 use std::process::Stdio;
 
 mod diag;
@@ -40,10 +40,10 @@ async fn main() -> anyhow::Result<()> {
 
     let mut builder = builder.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
 
-    let mut stdout = BufReader::new(builder.stdout.take().unwrap());
+    let stdout = BufReader::new(builder.stdout.take().unwrap());
 
-    let mut line = String::with_capacity(1024);
-    while stdout.read_line(&mut line).await? > 0 {
+    let mut lines = stdout.lines();
+    while let Some(line) = lines.next_line().await? {
         match serde_json::from_str(&line) {
             Ok(Message::BuildScriptExecuted(msg)) => {
                 let index = graph.units.iter().position(|unit| {
@@ -100,7 +100,6 @@ async fn main() -> anyhow::Result<()> {
                 tree_formatter.print(&status, false);
             }
         }
-        line.clear();
     }
 
     Ok(())
