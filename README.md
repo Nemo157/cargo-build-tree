@@ -1,3 +1,3 @@
 # cargo-build-tree
 
-[![asciicast](https://asciinema.org/a/HUUEWHTC6zp038cHCWy7wbpD2.svg)](https://asciinema.org/a/HUUEWHTC6zp038cHCWy7wbpD2)
+[![asciicast](https://asciinema.org/a/TYmsaTUzsLYiMb07FHvcelEEn.svg)](https://asciinema.org/a/TYmsaTUzsLYiMb07FHvcelEEn)
