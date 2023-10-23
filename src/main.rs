@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
 
     println!();
     let mut tree_formatter = print::Formatter::new(&graph);
-    tree_formatter.print(&status, false);
+    tree_formatter.print(&status);
 
     let mut builder = Command::new("cargo")
         .args(&["build", "--message-format=json"]).args(&args)
@@ -63,7 +63,7 @@ async fn main() -> anyhow::Result<()> {
                         if let Some(index) = index {
                             status[index] = Status::Done;
                         }
-                        tree_formatter.print(&status, true);
+                        tree_formatter.print(&status);
                     }
                     Ok(Message::CompilerArtifact(msg)) => {
                         // not possible to distinguish different platforms, just mark them all
@@ -78,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
                         for index in indexes {
                             status[index] = Status::Done;
                         }
-                        tree_formatter.print(&status, true);
+                        tree_formatter.print(&status);
                     }
                     Ok(Message::CompilerMessage(msg)) => {
                         // not possible to distinguish different platforms, just mark them all
@@ -95,30 +95,26 @@ async fn main() -> anyhow::Result<()> {
                                 status[index] = Status::Error;
                             }
                         }
-                        tree_formatter.clear();
                         diag::emit(msg.message);
-                        tree_formatter.print(&status, false);
+                        tree_formatter.print(&status);
                     }
                     Ok(Message::BuildFinished(_)) => {
                         break;
                     }
                     Ok(Message::TextLine(m)) => {
-                        tree_formatter.clear();
                         dbg!(m);
                         println!();
-                        tree_formatter.print(&status, false);
+                        tree_formatter.print(&status);
                     }
                     Ok(Message::Unknown) => {
-                        tree_formatter.clear();
                         dbg!(&line);
                         println!();
-                        tree_formatter.print(&status, false);
+                        tree_formatter.print(&status);
                     }
                     Err(e) => {
-                        tree_formatter.clear();
                         dbg!(e);
                         println!();
-                        tree_formatter.print(&status, false);
+                        tree_formatter.print(&status);
                     }
                 }
             }
@@ -139,12 +135,12 @@ async fn main() -> anyhow::Result<()> {
                     for index in indexes {
                         status[index] = Status::Building;
                     }
-                    tree_formatter.print(&status, true);
+                    tree_formatter.print(&status);
                 }
             }
             Item::Frame => {
                 tree_formatter.next_frame();
-                tree_formatter.print(&status, true);
+                tree_formatter.print(&status);
             }
         }
     }
