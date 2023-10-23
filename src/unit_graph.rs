@@ -103,6 +103,28 @@ pub struct Unit {
     pub dependencies: Vec<Dependency>,
 }
 
+impl fmt::Display for Unit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.pkg_id)?;
+        if self.mode == Mode::RunCustomBuild {
+            f.write_str(" (execute build script)")?;
+        } else if let [kind] = &self.target.kind[..] {
+            if kind == "custom-build" {
+                f.write_str(" (build build script)")?;
+            } else if self.pkg_id.name == self.target.name {
+                if kind != "lib" {
+                    write!(f, " ({kind})")?;
+                }
+            } else {
+                write!(f, " ({kind} {})", self.target.name)?;
+            }
+        } else {
+            write!(f, " ({:?} {})", self.target.kind, self.target.name)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub struct UnitGraph {
     pub version: u8,

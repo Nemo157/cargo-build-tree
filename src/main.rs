@@ -1,7 +1,7 @@
 // use escargot::format::{diagnostic::DiagnosticLevel, Message};
 use cargo_metadata::{Message, diagnostic::DiagnosticLevel};
 use tokio::{process::Command, io::{BufReader, AsyncBufReadExt as _}};
-use std::process::Stdio;
+use std::{process::Stdio, iter::FromIterator};
 use futures::stream::StreamExt as _;
 
 mod diag;
@@ -14,8 +14,15 @@ use unit_graph::{Mode, UnitGraph};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let mut args = std::env::args().skip(1).peekable();
+    if args.peek().map(|s| &**s) == Some("build-tree") {
+        let _ = args.next();
+    }
+    let args = Vec::from_iter(args);
+
     let output = Command::new("cargo")
         .args(&["build", "--message-format=json", "--unit-graph", "-Zunstable-options"])
+        .args(&args)
         .output()
         .await?;
 
@@ -27,19 +34,9 @@ async fn main() -> anyhow::Result<()> {
     let mut tree_formatter = print::Formatter::new(&graph);
     tree_formatter.print(&status, false);
 
-    let mut builder = Command::new("cargo");
-    builder.args(&["build", "--message-format=json"]);
-
-    let mut args = std::env::args().skip(1).peekable();
-    if args.peek().map(|s| &**s) == Some("build-tree") {
-        let _ = args.next();
-    }
-
-    for arg in args {
-        builder.arg(arg);
-    }
-
-    let mut builder = builder.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    let mut builder = Command::new("cargo")
+        .args(&["build", "--message-format=json"]).args(&args)
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
 
     let stdout = BufReader::new(builder.stdout.take().unwrap());
     let stderr = BufReader::new(builder.stderr.take().unwrap());
@@ -69,24 +66,34 @@ async fn main() -> anyhow::Result<()> {
                         tree_formatter.print(&status, true);
                     }
                     Ok(Message::CompilerArtifact(msg)) => {
-                        let index = graph.units.iter().position(|unit| {
-                            unit.mode == Mode::Build
+                        // not possible to distinguish different platforms, just mark them all
+                        // TODO: https://github.com/rust-lang/cargo/issues/12869
+                        // && unit.platform == msg.platform
+                        let indexes = graph.units.iter().zip(0..).filter_map(|(unit, position)| {
+                            (unit.mode == Mode::Build
+                                && unit.target.name == msg.target.name
                                 && unit.target.kind == msg.target.kind
-                                && unit.pkg_id == msg.package_id
+                                && unit.pkg_id == msg.package_id).then_some(position)
                         });
-                        if let Some(index) = index {
+                        for index in indexes {
                             status[index] = Status::Done;
                         }
                         tree_formatter.print(&status, true);
                     }
                     Ok(Message::CompilerMessage(msg)) => {
-                        let index = graph.units.iter().position(|unit| {
-                            unit.mode == Mode::Build
+                        // not possible to distinguish different platforms, just mark them all
+                        // TODO: https://github.com/rust-lang/cargo/issues/12869
+                        // && unit.platform == msg.platform
+                        let indexes = graph.units.iter().zip(0..).filter_map(|(unit, position)| {
+                            (unit.mode == Mode::Build
+                                && unit.target.name == msg.target.name
                                 && unit.target.kind == msg.target.kind
-                                && unit.pkg_id == msg.package_id
+                                && unit.pkg_id == msg.package_id).then_some(position)
                         });
-                        if let (Some(index), DiagnosticLevel::Error) = (index, msg.message.level) {
-                            status[index] = Status::Error;
+                        if let DiagnosticLevel::Error = msg.message.level {
+                            for index in indexes {
+                                status[index] = Status::Error;
+                            }
                         }
                         tree_formatter.clear();
                         diag::emit(msg.message);
@@ -123,12 +130,13 @@ async fn main() -> anyhow::Result<()> {
                     if version.starts_with('v') {
                         version = &version[1..];
                     }
-                    let index = graph.units.iter().position(|unit| {
-                        unit.mode == Mode::Build
+                    // not possible to distinguish different platforms or targets, just mark them all
+                    let indexes = graph.units.iter().zip(0..).filter_map(|(unit, position)| {
+                        (unit.mode == Mode::Build
                             && unit.pkg_id.name == name
-                            && unit.pkg_id.version == version
+                            && unit.pkg_id.version == version).then_some(position)
                     });
-                    if let Some(index) = index {
+                    for index in indexes {
                         status[index] = Status::Building;
                     }
                     tree_formatter.print(&status, true);

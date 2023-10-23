@@ -1,5 +1,5 @@
 use crate::status::Status;
-use crate::unit_graph::{Mode, Unit, UnitGraph};
+use crate::unit_graph::{Unit, UnitGraph};
 use fxhash::{FxBuildHasher, FxHashSet};
 use std::fmt::Write;
 
@@ -55,21 +55,24 @@ impl<'a> Formatter<'a> {
         status: &[Status],
         seen: &mut FxHashSet<usize>,
         indent: usize,
+        platform: Option<&str>,
     ) -> usize {
         let mut total = 1;
-        let extra = if unit.mode == Mode::RunCustomBuild {
-            " (execute build script)"
-        } else if unit.target.kind.contains(&"custom-build".to_owned()) {
-            " (build build script)"
-        } else {
-            ""
-        };
         write!(
             self.buffer,
-            "{:1$} {2} {3}{4}",
-            "", indent, &status[index].display(self.frame), unit.pkg_id, extra
+            "{:1$} {2} {unit}",
+            "", indent, &status[index].display(self.frame)
         )
         .unwrap();
+
+        if unit.platform.as_deref() != platform {
+            if let Some(unit_platform) = &unit.platform {
+                write!(self.buffer, " ({unit_platform})").unwrap();
+            } else {
+                self.buffer.push_str(" (host)");
+            }
+        }
+
         if seen.insert(index) {
             let mut boring_seen = seen.clone();
             if let Some(count) = self.boring(index, unit, status, &mut boring_seen) {
@@ -88,17 +91,18 @@ impl<'a> Formatter<'a> {
                         status,
                         seen,
                         indent + 2,
+                        platform,
                     );
                 }
                 if !done.is_empty() {
                     write!(
                         self.buffer,
                         "{:1$} {2} ({3}",
-                        "", indent + 2, Status::Done.display(self.frame), &self.graph.units[done[0].index].pkg_id
+                        "", indent + 2, Status::Done.display(self.frame), &self.graph.units[done[0].index].target.name
                     )
                     .unwrap();
                     for dep in done.iter().skip(1) {
-                        write!(self.buffer, ", {}", &self.graph.units[dep.index].pkg_id).unwrap();
+                        write!(self.buffer, ", {}", &self.graph.units[dep.index].target.name).unwrap();
                     }
                     writeln!(self.buffer, ")").unwrap();
                     total += 1;
@@ -123,8 +127,9 @@ impl<'a> Formatter<'a> {
         let mut total = 2;
         let mut seen =
             FxHashSet::with_capacity_and_hasher(self.graph.units.len(), FxBuildHasher::default());
+        let platform = self.graph.units[self.graph.roots[0]].platform.as_deref();
         for &root in &self.graph.roots {
-            total += self.println(root, &self.graph.units[root], status, &mut seen, 0);
+            total += self.println(root, &self.graph.units[root], status, &mut seen, 0, platform);
         }
         writeln!(self.buffer).unwrap();
         self.lines = total;
