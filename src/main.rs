@@ -29,10 +29,11 @@ async fn main() -> anyhow::Result<()> {
     let graph: UnitGraph = serde_json::from_slice(&output.stdout)?;
 
     let mut status = vec![Status::Unknown; graph.units.len()];
+    let mut diagnostics = vec![Vec::new(); graph.units.len()];
 
     println!();
     let mut tree_formatter = print::Formatter::new(&graph);
-    tree_formatter.print(&status);
+    tree_formatter.print(&status, &diagnostics);
 
     let mut builder = Command::new("cargo")
         .args(&["build", "--message-format=json"]).args(&args)
@@ -63,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
                         if let Some(index) = index {
                             status[index] = Status::Done;
                         }
-                        tree_formatter.print(&status);
+                        tree_formatter.print(&status, &diagnostics);
                     }
                     Ok(Message::CompilerArtifact(msg)) => {
                         // not possible to distinguish different platforms, just mark them all
@@ -78,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
                         for index in indexes {
                             status[index] = Status::Done;
                         }
-                        tree_formatter.print(&status);
+                        tree_formatter.print(&status, &diagnostics);
                     }
                     Ok(Message::CompilerMessage(msg)) => {
                         // not possible to distinguish different platforms, just mark them all
@@ -90,13 +91,14 @@ async fn main() -> anyhow::Result<()> {
                                 && unit.target.kind == msg.target.kind
                                 && unit.pkg_id == msg.package_id).then_some(position)
                         });
-                        if let DiagnosticLevel::Error = msg.message.level {
-                            for index in indexes {
+                        for index in indexes {
+                            if let DiagnosticLevel::Error = msg.message.level {
                                 status[index] = Status::Error;
                             }
+                            diagnostics[index].push(msg.message.clone());
                         }
                         diag::emit(msg.message);
-                        tree_formatter.print(&status);
+                        tree_formatter.print(&status, &diagnostics);
                     }
                     Ok(Message::BuildFinished(_)) => {
                         break;
@@ -104,17 +106,17 @@ async fn main() -> anyhow::Result<()> {
                     Ok(Message::TextLine(m)) => {
                         dbg!(m);
                         println!();
-                        tree_formatter.print(&status);
+                        tree_formatter.print(&status, &diagnostics);
                     }
                     Ok(Message::Unknown) => {
                         dbg!(&line);
                         println!();
-                        tree_formatter.print(&status);
+                        tree_formatter.print(&status, &diagnostics);
                     }
                     Err(e) => {
                         dbg!(e);
                         println!();
-                        tree_formatter.print(&status);
+                        tree_formatter.print(&status, &diagnostics);
                     }
                 }
             }
@@ -135,12 +137,12 @@ async fn main() -> anyhow::Result<()> {
                     for index in indexes {
                         status[index] = Status::Building;
                     }
-                    tree_formatter.print(&status);
+                    tree_formatter.print(&status, &diagnostics);
                 }
             }
             Item::Frame => {
                 tree_formatter.next_frame();
-                tree_formatter.print(&status);
+                tree_formatter.print(&status, &diagnostics);
             }
         }
     }
